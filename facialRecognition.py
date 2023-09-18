@@ -1,9 +1,13 @@
 import argparse
+import string
 from pathlib import Path
+
+import cv2
 import face_recognition
 import pickle
 from collections import Counter
 from PIL import Image, ImageDraw
+import numpy as np
 
 DEFAULT_ENCODINGS_PATH = Path("output/encodings.pkl")
 BOUNDING_BOX_COLOR = "red"
@@ -83,8 +87,11 @@ def recognize_faces(
     )
 
     # load image into pillow and create draw object
-    pillow_image = Image.fromarray(input_image)
-    draw = ImageDraw.Draw(pillow_image)
+    # pillow_image = Image.fromarray(input_image)
+    # draw = ImageDraw.Draw(pillow_image)
+
+    # load image in cv2 img obj
+    img = cv2.imread(image_location,cv2.IMREAD_COLOR)
 
     # compare new encodings to known encodings from training data
     # bounding box is perceived area around face detected
@@ -96,27 +103,22 @@ def recognize_faces(
             name = "Unknown"
         # prints output (duh)
         # print(name, bounding_box)
-        _display_face(draw, bounding_box, name)
-    del draw
-    pillow_image.show()
+        _display_face(img, bounding_box, name)
+    # del draw
+    # pillow_image.show()
 
 
-def _display_face(draw, bounding_box, name):
+def _display_face(img, bounding_box, name):
+    # draw rectangle on face and stuff
     top, right, bottom, left = bounding_box
-    draw.rectangle(((left, top), (right, bottom)), outline=BOUNDING_BOX_COLOR)
-    text_left, text_top, text_right, text_bottom = draw.textbbox(
-        (left, bottom), name
-    )
-    draw.rectangle(
-        ((text_left, text_top), (text_right, text_bottom)),
-        fill="red",
-        outline="red",
-    )
-    draw.text(
-        (text_left, text_top),
-        name,
-        fill=TEXT_COLOR,
-    )
+    cv2.rectangle(img, (left, top), (right,bottom), (0,0,255), 10)
+    # add name text
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    uppercase_name = name.upper()
+    cv2.putText(img, uppercase_name, (left, bottom), font, 1, (200,255,155), 2, cv2.LINE_AA)
+    cv2.imshow('image', img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
 # takes in unknown encoding and loaded encodings and compares
@@ -148,12 +150,21 @@ def validate(model: str = "hog"):
 if __name__ == "__main__":
     if args.train:
         encode_known_faces(model=args.m)
-    if args.validate:
+    elif args.validate:
         validate(model=args.m)
-    if args.test:
+    elif args.test:
         recognize_faces(image_location=args.f, model=args.m)
-    if args.doiwork:
+    elif args.doiwork:
         print("yes, i am working")
-    if args.live:
+    elif args.live:
         print("Starting Camera Feed...")
-
+    else:
+        # general run format (no args)
+        user_input = int(input("Mode (1 for img, 2 for live): "))
+        if user_input == 1:
+            user_input = input("Enter Image Path: ")
+            recognize_faces(image_location=user_input)
+        elif user_input == 2:
+            print("i haven't made this yet lolz")
+        else:
+            print("Invalid input")
