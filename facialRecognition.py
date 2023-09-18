@@ -1,8 +1,39 @@
+import argparse
 from pathlib import Path
 import face_recognition
 import pickle
+from collections import Counter
+from PIL import Image, ImageDraw
 
 DEFAULT_ENCODINGS_PATH = Path("output/encodings.pkl")
+BOUNDING_BOX_COLOR = "red"
+TEXT_COLOR = "white"
+
+parser = argparse.ArgumentParser(description="Facial Recognition Project")
+parser.add_argument("--train", action="store_true", help="Train on input data")
+parser.add_argument(
+    "--validate", action="store_true", help="Run Validation Script (many windows will open)"
+)
+parser.add_argument(
+    "--test", action="store_true", help="Test with unknown image (png or jpg)"
+)
+parser.add_argument(
+    "--doiwork", action="store_true", help="makes sure project is able to be run"
+)
+parser.add_argument(
+    "--live", action="store_true", help="Runs Live Facial Recognition"
+)
+parser.add_argument(
+    "-m",
+    action="store",
+    default="hog",
+    choices=["hog", "cnn"],
+    help="Which model to use for training: HOG(cpu intensive) preferred"
+)
+parser.add_argument(
+    "-f", action="store",  help="Image Path"
+)
+args = parser.parse_args()
 
 Path("training").mkdir(exist_ok=True)
 Path("output").mkdir(exist_ok=True)
@@ -31,4 +62,98 @@ def encode_known_faces(
         pickle.dump(name_encodings, f)
 
 
-encode_known_faces()
+# recognizes all faces
+def recognize_faces(
+        image_location: str,
+        model: str = "hog",
+        encodings_location: Path = DEFAULT_ENCODINGS_PATH,
+) -> None:
+    with encodings_location.open(mode="rb") as f:
+        loaded_encodings = pickle.load(f)
+
+    input_image = face_recognition.load_image_file(image_location)
+
+    # gets locations of faces in input image
+    input_face_locations = face_recognition.face_locations(
+        input_image, model=model
+    )
+    # gets encodings of faces in input image
+    input_face_encodings = face_recognition.face_encodings(
+        input_image, input_face_locations
+    )
+
+    # load image into pillow and create draw object
+    pillow_image = Image.fromarray(input_image)
+    draw = ImageDraw.Draw(pillow_image)
+
+    # compare new encodings to known encodings from training data
+    # bounding box is perceived area around face detected
+    for bounding_box, unknown_encoding in zip(
+            input_face_locations, input_face_encodings
+    ):
+        name = _recognize_face(unknown_encoding, loaded_encodings)
+        if not name:
+            name = "Unknown"
+        # prints output (duh)
+        # print(name, bounding_box)
+        _display_face(draw, bounding_box, name)
+    del draw
+    pillow_image.show()
+
+
+def _display_face(draw, bounding_box, name):
+    top, right, bottom, left = bounding_box
+    draw.rectangle(((left, top), (right, bottom)), outline=BOUNDING_BOX_COLOR)
+    text_left, text_top, text_right, text_bottom = draw.textbbox(
+        (left, bottom), name
+    )
+    draw.rectangle(
+        ((text_left, text_top), (text_right, text_bottom)),
+        fill="red",
+        outline="red",
+    )
+    draw.text(
+        (text_left, text_top),
+        name,
+        fill=TEXT_COLOR,
+    )
+
+
+# takes in unknown encoding and loaded encodings and compares
+# returns likely result?
+def _recognize_face(unknown_encoding, loaded_encodings):
+    boolean_matches = face_recognition.compare_faces(
+        loaded_encodings["encodings"], unknown_encoding
+    )
+    votes = Counter(
+        name
+        for match, name in zip(boolean_matches, loaded_encodings["names"])
+        if match
+    )
+    # TODO: possibly could implement "Could also be..." here
+    if votes:
+        # for item in votes:
+        #     print(item)
+        return votes.most_common(1)[0][0]
+
+
+def validate(model: str = "hog"):
+    for filepath in Path("validation").rglob("*"):
+        if filepath.is_file():
+            recognize_faces(
+                image_location=str(filepath.absolute()), model=model
+            )
+
+
+if __name__ == "__main__":
+    if args.train:
+        encode_known_faces(model=args.m)
+    if args.validate:
+        validate(model=args.m)
+    if args.test:
+        recognize_faces(image_location=args.f, model=args.m)
+    if args.doiwork:
+        print("yes, i am working")
+    if args.live:
+        print("Starting Camera Feed...")
+
