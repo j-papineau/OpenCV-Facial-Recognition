@@ -133,18 +133,9 @@ def recognize_face_live(
         name = _recognize_face(unknown_encoding, loaded_encodings)
         if not name:
             name = "Unknown"
-        display_face_live(frame, bounding_box, name)
-
-
-def display_face_live(img, bounding_box, name):
-    top, right, bottom, left = bounding_box
-    cv2.rectangle(img, (left, top), (right, bottom), (0, 0, 255), 4)
-    # add name text
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    uppercase_name = name.upper()
-    # img = cv2.flip(img, 1)
-    cv2.putText(img, uppercase_name, (left, bottom), font, 0.5, (200, 255, 155), 1, cv2.LINE_AA)
-    # cv2.imshow("video", img)
+        if not bounding_box:
+            bounding_box = ""
+        return bounding_box, name
 
 
 def _display_face(img, bounding_box, name):
@@ -191,48 +182,60 @@ def validate(model: str = "hog"):
 
 def live_facial_recognition():
     print("attempting to open video capture")
-    
+
     # change camera operation based on OS
-    
+
     if platform == "darwin":
         camera = cv2.VideoCapture(0)
     elif platform == "win32":
         camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    
-    
 
     if not camera.isOpened():
         raise IOError("Cannot open video source")
 
-    do_facial_recognition = True
-
+    # do_facial_recognition = True
     print("camera opened successfully")
-
     pTime = 0
-
     counter = 0
 
     while True:
         ret, frame = camera.read()
 
-        frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+        frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         # use boolean to only do every other frame (cpu will die)
-        if counter % 30 == 0:
-            recognize_face_live(frame)
-        else:
-            if counter > 1230:
-                counter = 0
+        if counter % 10 == 0:
+            # TODO: refactor: return bounding box so it can be printed over and over
+            res = recognize_face_live(frame)
+            if res:
+                bounding_box = res[0]
+                name = res[1]
             else:
-                counter += 1
+                bounding_box = None
+                name = None
+            # counter += 1
+            
+        counter += 1
 
+        if counter > 100000:
+            counter = 0
+            
         # recognize_face_live(frame)
 
         # instantiate thread to speed up
         # threading.Thread(target=recognize_face_live, args=(frame.copy(),)).start()
-        # frame = cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_AREA)
+        
+        # draw stuff on image
+        frame = cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_AREA)
+        if bounding_box:
+            top, right, bottom, left = bounding_box
+            cv2.rectangle(frame, (left * 2,top * 2), (right * 2, bottom * 2), (0, 50, 255), 2)
+            font = cv2.FONT_HERSHEY_COMPLEX
+            cv2.putText(frame, name, (left * 2, bottom * 2), font, 0.5, (255,255, 255), 1, cv2.LINE_AA)
         cTime = time.time()
         fps = 1 / (cTime - pTime)
         pTime = cTime
+            
         cv2.putText(frame, f'FPS:{int(fps)}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         cv2.imshow("video", frame)
         c = cv2.waitKey(1)
