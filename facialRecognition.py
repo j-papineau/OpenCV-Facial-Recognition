@@ -11,6 +11,7 @@ import time
 from PIL import Image, ImageDraw
 import numpy as np
 import os
+from sys import platform
 
 DEFAULT_ENCODINGS_PATH = Path("output/encodings.pkl")
 BOUNDING_BOX_COLOR = "red"
@@ -113,7 +114,7 @@ def recognize_faces(
 
 def recognize_face_live(
         frame,
-        model: str = "cnn",
+        model: str = "hog",
         encodings_location: Path = DEFAULT_ENCODINGS_PATH,
 ) -> None:
     with encodings_location.open(mode="rb") as f:
@@ -190,7 +191,15 @@ def validate(model: str = "hog"):
 
 def live_facial_recognition():
     print("attempting to open video capture")
-    camera = cv2.VideoCapture(0)
+    
+    # change camera operation based on OS
+    
+    if platform == "darwin":
+        camera = cv2.VideoCapture(0)
+    elif platform == "win32":
+        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    
+    
 
     if not camera.isOpened():
         raise IOError("Cannot open video source")
