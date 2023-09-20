@@ -258,4 +258,12 @@ def only_recognize_face(frame, model="hog") -> None:
 
 if __name__ == "__main__":
     
+    if args.train:
+        print(f'starting training routine from ./training/...')
+        encode_known_faces(model=args.m)
+    elif args.validate:
+        validate(model=args.m)
+    elif args.train_emotion:
+        print("training emotion off known data")
+    
     recognize_multiple_faces_live()
