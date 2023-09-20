@@ -249,10 +249,6 @@ def live_facial_recognition():
     camera.release()
     cv2.destroyAllWindows()
 
-
-def load_known_encodings():
-    pass
-
 # optimize to take loaded_encodings as a param
 def recognize_multiple_faces_live():
     with DEFAULT_ENCODINGS_PATH.open(mode="rb") as f:
@@ -352,6 +348,7 @@ if __name__ == "__main__":
     global face_match
     
     if args.train:
+        print(f'starting training routine from ./training/...')
         encode_known_faces(model=args.m)
     elif args.validate:
         validate(model=args.m)
