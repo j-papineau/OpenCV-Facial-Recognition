@@ -265,6 +265,8 @@ def recognize_multiple_faces_live():
     if not camera.isOpened():
         raise IOError("Cannot open video source")
     
+    # camera.set(cv2.CAP_PROP_FPS, 20)
+    
     pTime = 0
     counter = 0
 
@@ -274,14 +276,15 @@ def recognize_multiple_faces_live():
         print("facial encodings loaded")
 
     face_data = []
+    
 
     while True:
+        
         ret, frame = camera.read()
 
         frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
-        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        if counter % 10 == 0:
+        
+        if counter % 30 == 0:
             face_data = recognize_multiple_faces(frame, loaded_encodings)
         else:
             pass
@@ -343,6 +346,71 @@ def recognize_multiple_faces(
     return face_data
 
 
+def only_facial_recognition():
+    print("attempting to start video captue")
+
+    # OS camera statement
+    if platform == "darwin":
+        camera = cv2.VideoCapture(0)
+    elif platform == "win32":
+        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    if not camera.isOpened():
+        raise IOError("Cannot open video source")
+    
+    # camera.set(cv2.CAP_PROP_FPS, 20)
+    
+    pTime = 0
+    counter = 0
+
+    # load known encodings from pickle
+
+
+    face_data = []
+    
+
+    while True:
+        
+        ret, frame = camera.read()
+
+        frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+        
+        if counter % 2 == 0:
+            face_data = only_recognize_face(frame)
+        else:
+            pass
+        counter += 1
+        
+        frame = cv2.resize(frame, None, fx=2, fy=2, interpolation=cv2.INTER_AREA)
+        
+        if face_data:
+            for bounding_box in face_data:
+                top, right, bottom, left = bounding_box
+                cv2.rectangle(frame, (left * 2,top * 2), (right * 2, bottom * 2), (0, 50, 255), 2)
+                
+        cTime = time.time()
+        fps = 1 / (cTime - pTime)
+        pTime = cTime
+    
+        cv2.putText(frame, f'FPS:{int(fps)}', (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.imshow("video", frame)
+        c = cv2.waitKey(1)
+        if c == 27:
+            break
+
+    camera.release()
+    cv2.destroyAllWindows()
+            
+
+
+def only_recognize_face(frame, model="hog") -> None:
+    input_face_locations = face_recognition.face_locations(
+        frame, model=model
+    )
+    
+    return input_face_locations
+    
+
 if __name__ == "__main__":
 
     global face_match
@@ -367,13 +435,15 @@ if __name__ == "__main__":
             user_input = input("Enter Image Path: ")
             recognize_faces(image_location=user_input)
         elif user_input == 2:
-            mode = int(input("Facial Recognition Routine\n 1.) General Live Routine \n 2.) Multiple Faces \n 3.) With Emotion\n"))
+            mode = int(input("Facial Recognition Routine\n 1.) General Live Routine \n 2.) Multiple Faces \n 3.) With Emotion\n 4.) only detection"))
             if mode == 1:
                 live_facial_recognition()
             elif mode == 2:
                 recognize_multiple_faces_live()
             elif mode == 3:
                 pass
+            elif mode == 4:
+                only_facial_recognition()
             else:
                 print("invalid")
         else:
