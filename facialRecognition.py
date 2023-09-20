@@ -2,7 +2,6 @@ import argparse
 import string
 import threading
 from pathlib import Path
-
 import cv2
 import face_recognition
 import pickle
@@ -13,6 +12,7 @@ import numpy as np
 import os
 from sys import platform
 from recognizeChad import *
+import mediapipe as mp
 
 DEFAULT_ENCODINGS_PATH = Path("output/encodings.pkl")
 BOUNDING_BOX_COLOR = "red"
@@ -72,7 +72,7 @@ def encode_known_faces(
         pickle.dump(name_encodings, f)
 
 # takes in unknown encoding and loaded encodings and compares
-# returns likely result?
+# returns likely result? could be bottle neck
 def _recognize_face(unknown_encoding, loaded_encodings):
     boolean_matches = face_recognition.compare_faces(
         loaded_encodings["encodings"], unknown_encoding
@@ -86,15 +86,9 @@ def _recognize_face(unknown_encoding, loaded_encodings):
     if votes:
         # for item in votes:
         #     print(item)
+        
         return votes.most_common(1)[0][0]
 
-
-def validate(model: str = "hog"):
-    for filepath in Path("validation").rglob("*"):
-        if filepath.is_file():
-            recognize_faces(
-                image_location=str(filepath.absolute()), model=model
-            )
 
 # optimize to take loaded_encodings as a param
 def recognize_multiple_faces_live():
@@ -118,6 +112,7 @@ def recognize_multiple_faces_live():
     counter = 0
 
     # load known encodings from pickle
+    
 
     if loaded_encodings:
         print("facial encodings loaded")
@@ -128,9 +123,11 @@ def recognize_multiple_faces_live():
         
         ret, frame = camera.read()
 
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
         frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
         
-        if counter % 30 == 0:
+        if counter % 10 == 0:
             face_data = recognize_multiple_faces(frame, loaded_encodings)
         else:
             pass
@@ -258,14 +255,117 @@ def only_recognize_face(frame, model="hog") -> None:
     return input_face_locations
     
 
+def optimized_run():
+    with DEFAULT_ENCODINGS_PATH.open(mode="rb") as f:
+        loaded_encodings = pickle.load(f)
+
+    print("attempting to start video capture")
+
+    if platform == "darwin":
+        camera = cv2.VideoCapture(0)
+    elif platform == "win32":
+        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    if not camera.isOpened():
+        raise IOError("Cannot open video source")
+    
+    # camera.set(cv2.CAP_PROP_FPS, 20)
+    
+    pTime = 0
+    counter = 0
+
+    # load known encodings from pickle
+    if loaded_encodings:
+        print("facial encodings loaded")
+
+    face_data = []
+
+    
+    while True:
+        ret, frame = camera.read()
+
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        frame = cv2.resize(frame, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+
+
+        if counter % 2 == 0:
+            face_encoding = face_recognition.face_encodings(frame)
+            if face_encoding:
+                name = _recognize_face(face_encoding[0], loaded_encodings)
+                if name:
+                    print(name)
+                else:
+                    print("Unknown")
+            
+        
+        counter += 1
+
+        # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        cv2.imshow("Video", frame)
+        
+        c = cv2.waitKey(1)
+        if c == 27:
+            break
+
+def hand_recognition():
+    if platform == "darwin":
+        camera = cv2.VideoCapture(0)
+    elif platform == "win32":
+        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    mpHands = mp.solutions.hands
+    hands = mpHands.Hands(static_image_mode=False,
+                          max_num_hands = 2,
+                          min_detection_confidence=0.5,
+                          min_tracking_confidence=0.5)
+    mpDraw = mp.solutions.drawing_utils
+
+    pTime = 0
+    cTime = 0
+
+    while True:
+        ret, frame = camera.read()
+        frameRGB = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = hands.process(frame)
+        # if hands are detected
+        if results.multi_hand_landmarks:
+            for handLms in results.multi_hand_landmarks:
+                for id, lm in enumerate(handLms.landmark):
+                    h, w, c = frame.shape
+                    cx, cy = int(lm.x *w), int(lm.y*h)
+                    # if id == 0:
+                    cv2.circle(frame, (cx,cy), 3, (255,0,255), cv2.FILLED)
+                mpDraw.draw_landmarks(frame, handLms, mpHands.HAND_CONNECTIONS)
+        cTime = time.time()
+        fps = 1/(cTime-pTime)
+        pTime = cTime
+
+        cv2.putText(frame,str(int(fps)), (10,70), cv2.FONT_HERSHEY_PLAIN, 3, (255,0,255), 3)
+
+        cv2.imshow("Video", frame)
+        
+        c = cv2.waitKey(1)
+        if c == 27:
+            break
+
+    camera.release()
+    cv2.destroyAllWindows()
+
+def hand_landmarks():
+    pass
+
+
 if __name__ == "__main__":
     
     if args.train:
         print(f'starting training routine from ./training/...')
         encode_known_faces(model=args.m)
-    elif args.validate:
-        validate(model=args.m)
     elif args.train_emotion:
         print("training emotion off known data")
     
-    recognize_multiple_faces_live()
+    # recognize_multiple_faces_live()
+    hand_recognition()
+
+    # optimized_run()
