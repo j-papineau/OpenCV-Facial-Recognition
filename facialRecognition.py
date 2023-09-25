@@ -74,20 +74,29 @@ def encode_known_faces(
 # takes in unknown encoding and loaded encodings and compares
 # returns likely result? could be bottle neck
 def _recognize_face(unknown_encoding, loaded_encodings):
-    boolean_matches = face_recognition.compare_faces(
-        loaded_encodings["encodings"], unknown_encoding
-    )
-    votes = Counter(
-        name
-        for match, name in zip(boolean_matches, loaded_encodings["names"])
-        if match
-    )
-    # TODO: possibly could implement "Could also be..." here
-    if votes:
-        # for item in votes:
-        #     print(item)
-        
-        return votes.most_common(1)[0][0]
+    
+    # chat gpt's optimization
+
+    encodings = np.array(loaded_encodings["encodings"])
+    boolean_matches = face_recognition.compare_faces(encodings, unknown_encoding)
+
+    if any(boolean_matches):
+        index = np.argmax(boolean_matches)
+        return loaded_encodings["names"][index]
+      
+    # boolean_matches = face_recognition.compare_faces(
+    #     loaded_encodings["encodings"], unknown_encoding
+    # )
+    # votes = Counter(
+    #     name
+    #     for match, name in zip(boolean_matches, loaded_encodings["names"])
+    #     if match
+    # )
+    
+    # if votes:
+    #     # for item in votes:
+    #     #     print(item)
+    #     return votes.most_common(1)[0][0]
 
 
 # optimize to take loaded_encodings as a param
@@ -321,7 +330,6 @@ def hand_recognition():
                           min_detection_confidence=0.5,
                           min_tracking_confidence=0.5)
     mpDraw = mp.solutions.drawing_utils
-
     pTime = 0
     cTime = 0
 
@@ -357,6 +365,7 @@ def hand_landmarks():
     pass
 
 
+
 if __name__ == "__main__":
     
     if args.train:
@@ -365,6 +374,7 @@ if __name__ == "__main__":
     elif args.train_emotion:
         print("training emotion off known data")
     
+    # recognize_multiple_faces_live()
     # recognize_multiple_faces_live()
     hand_recognition()
 
