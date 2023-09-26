@@ -8,7 +8,8 @@ import cv2
 import numpy as np
 from hand_tracking import *
 import mediapipe as mp
-from keras.models import load_model
+# from keras.models import load_model
+import pyautogui
 
 
 # from ..hand_tracking import *
@@ -19,6 +20,8 @@ class Main_Tab(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
 
         self.layout = QGridLayout()
+
+        self.screenWidth, self.screenHeight = pyautogui.size()
         
 
         self.FeedLabel = QLabel()
@@ -38,19 +41,29 @@ class Main_Tab(QtWidgets.QWidget):
 
         self.sidebar_layout = QFormLayout()
 
-        self.sidebar_label = QLabel("Options")
+        self.sidebar_label = QLabel("Hand Pos:")
         self.sidebar_layout.addWidget(self.sidebar_label)
 
-        
-        self.hand_tracking_check = QCheckBox("Hand Tracking")
-        self.hand_tracking_check.setChecked(True)
-        self.hand_tracking_check.stateChanged.connect(self.handle_hand_check)
-        self.sidebar_layout.addWidget(self.hand_tracking_check)
+        self.sidebar_layout.addWidget(QLabel("X"))
+        self.x_pos = QLineEdit()
+        self.sidebar_layout.addWidget(self.x_pos)
 
-        self.gesture_check = QCheckBox("Gesture Recognition")
-        self.gesture_check.setChecked(False)
-        self.gesture_check.stateChanged.connect(self.handle_gesture_check)
-        self.sidebar_layout.addWidget(self.gesture_check)
+        self.sidebar_layout.addWidget(QLabel("Y"))
+        self.y_pos = QLineEdit()
+        self.sidebar_layout.addWidget(self.y_pos)
+
+        self.sidebar_layout.addWidget(QLabel("Z"))
+        self.z_pos = QLineEdit()
+        self.sidebar_layout.addWidget(self.z_pos)
+
+        self.claw_indicator = QCheckBox("Close Activation")
+        self.sidebar_layout.addWidget(self.claw_indicator)
+
+        self.sidebar_layout.addWidget(QLabel("Command"))
+        self.command_label = QLabel("None")
+        self.command_label.setStyleSheet("font-size: 24pt;")
+        self.sidebar_layout.addWidget(self.command_label)
+
 
         # bottom buttons
 
@@ -58,8 +71,10 @@ class Main_Tab(QtWidgets.QWidget):
         self.layout.addWidget(self.cancel_btn, 1, 1)
         self.layout.addLayout(self.sidebar_layout, 0, 1)
 
-        self.camera = Camera_Thread_Hands()
+        self.camera = Camera_Thread_Gesture()
         self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
+        self.camera.GestureUpdate.connect(self.GestureUpdateSlot)
+        self.camera.HandPosUpdate.connect(self.HandPosUpdateSlot)
         self.camera.start()
 
         # bottom layout for output
@@ -78,12 +93,46 @@ class Main_Tab(QtWidgets.QWidget):
         self.FeedLabel.setPixmap(QPixmap.fromImage(img))
 
     def GestureUpdateSlot(self, gestures):
-        print(gestures)
+        # print(gestures)
+        # none for no hands {}, for no gesture, or gesture[0] most likely
         self.bottom_out_label.setText(gestures[0])
-    
-    def hand_pos_update_slot(self, hand_pos):
-        print(hand_pos)
 
+        if gestures[0] == "Closed_Fist":
+            self.claw_indicator.setChecked(True)
+        else:
+            self.claw_indicator.setChecked(False)
+
+    def HandPosUpdateSlot(self, landmarks):
+        # print(landmarks)
+        # calc is being done in thread for mouse pos
+        # print(landmarks)
+        if landmarks:
+            command_string = ""
+            self.x_pos.setText(str(round(landmarks["x"], 2)))
+            self.y_pos.setText(str(round(landmarks["y"], 2)))
+            self.z_pos.setText(str(round(landmarks["z"], 2)))
+
+            # check x first
+            # can calculate "rightness-factor" here
+
+            if landmarks["x"] > .60:
+                command_string = "Right"
+            elif landmarks["x"] < .40:
+                command_string = "Left"
+            else:
+                command_string = "None"
+
+            if landmarks["y"] > .70:
+                command_string += "-Down"
+            elif landmarks["y"] < .30:
+                command_string += "-Up"
+            else:
+                command_string += "-None"
+
+            self.command_label.setText(command_string)
+            self.command_label.adjustSize()
+            # pyautogui.moveTo(mouseX, mouseY)
+        
     def handle_hand_check(self):
         self.do_hand_tracking = self.hand_tracking_check.isChecked()
 
@@ -160,7 +209,10 @@ class Camera_Thread_Hands(QThread):
 class Camera_Thread_Gesture(QThread):
     ImageUpdate = pyqtSignal(QImage)
     GestureUpdate = pyqtSignal(list)
+    HandPosUpdate = pyqtSignal(dict)
+    
     def run(self):
+        self.ThreadActive = True
         BaseOptions = mp.tasks.BaseOptions
         GestureRecognizer = mp.tasks.vision.GestureRecognizer
         GestureRecognizerOptions = mp.tasks.vision.GestureRecognizerOptions
@@ -178,24 +230,59 @@ class Camera_Thread_Gesture(QThread):
             running_mode=VisionRunningMode.LIVE_STREAM,
             result_callback=print_result)
         with GestureRecognizer.create_from_options(options) as recognizer:
+            mp_drawing = mp.solutions.drawing_utils
+            mp_hands = mp.solutions.hands
+
 
             camera = cv2.VideoCapture(0)
-            pTime = 0
-            framerate = camera.get(cv2.CAP_PROP_FPS)
-            timestamp = 0
-            while True:
-                ret, frame = camera.read()
-                # timestamp = mp.Timestamp.from_seconds(time.time())
-                pTime = time.time()
-                if ret:
-                    timestamp += 1
-                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-                    recognizer.recognize_async(mp_image, timestamp)
-                    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    img = cv2.flip(image, 1)
-                    qt_format = QImage(img.data, img.shape[1], img.shape[0], QImage.Format.Format_RGB888)
-                    pic = qt_format.scaled(640, 480, Qt.AspectRatioMode.KeepAspectRatio)
-                    self.ImageUpdate.emit(pic)
+            with mp_hands.Hands(
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            ) as hands:
+                
+                pTime = 0
+                framerate = camera.get(cv2.CAP_PROP_FPS)
+                timestamp = 0
+                while self.ThreadActive:
+                    ret, frame = camera.read()
+                    # timestamp = mp.Timestamp.from_seconds(time.time())
+                    pTime = time.time()
+                    if ret:
+                        timestamp += 1
+                        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                        recognizer.recognize_async(mp_image, timestamp)
+                        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        img = cv2.flip(image, 1)
+                        # draws hand ladmarks
+                        results = hands.process(img)
+
+                        result = results.multi_hand_landmarks
+                        frameHeight, frameWidth, _ = frame.shape
+
+                        # looping through hands causes slowdown
+
+                        if result:
+                            for hand in result:
+                                mp_drawing.draw_landmarks(img, hand)
+                                landmarks = hand.landmark
+                                for id, landmark in enumerate(landmarks):
+                                    # index 8 is index fingie
+                                    if id == 8:
+                                        # x = int(landmark.x * frameWidth)
+                                        # y = int(landmark.y * frameHeight)
+                                        cv2.circle(img=img, center=(int(landmark.x * frameWidth), int(landmark.y * frameHeight)), radius=30, color=(0,255,255))
+                                        
+                                        coords = {
+                                            'x': landmark.x,
+                                            'y': landmark.y,
+                                            'z': landmark.z
+                                        }
+                                        self.HandPosUpdate.emit(coords)
+                                        # z
+
+                        qt_format = QImage(img.data, img.shape[1], img.shape[0], QImage.Format.Format_RGB888)
+                        pic = qt_format.scaled(640, 480, Qt.AspectRatioMode.KeepAspectRatio)
+                        self.ImageUpdate.emit(pic)
         
     def stop(self):
         self.ThreadActive = False
