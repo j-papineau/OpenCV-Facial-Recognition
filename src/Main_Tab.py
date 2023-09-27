@@ -11,6 +11,7 @@ import mediapipe as mp
 # from keras.models import load_model
 import pyautogui
 from controller_visualizer import *
+from sys import platform
 
 
 # from ..hand_tracking import *
@@ -21,8 +22,12 @@ class Main_Tab(QtWidgets.QWidget):
         super().__init__(*args, **kwargs)
 
         self.layout = QGridLayout()
+        
+        pyautogui.PAUSE = 0
+        
+        self.mouse_mode = False
 
-        # self.screenWidth, self.screenHeight = pyautogui.size()
+        self.screenWidth, self.screenHeight = pyautogui.size()
         
 
         self.FeedLabel = QLabel()
@@ -64,6 +69,10 @@ class Main_Tab(QtWidgets.QWidget):
         self.command_label = QLabel("None")
         self.command_label.setStyleSheet("font-size: 24pt;")
         self.sidebar_layout.addWidget(self.command_label)
+        
+        self.mouse_check = QCheckBox("Mouse mode")
+        self.mouse_check.stateChanged.connect(self.handle_mouse_check)
+        self.sidebar_layout.addWidget(self.mouse_check)
        
 
 
@@ -116,6 +125,21 @@ class Main_Tab(QtWidgets.QWidget):
         # print(landmarks)
         # calc is being done in thread for mouse pos
         # print(landmarks)
+        
+        # mouse stuff
+        if self.mouse_mode:
+            x = int(landmarks["x"] * landmarks["frameWidth"])
+            mouseX = self.screenWidth/landmarks["frameWidth"]*x
+            
+            y = int(landmarks["y"] * landmarks["frameHeight"])
+            mouseY = self.screenHeight/landmarks["frameHeight"]*y
+            
+            pyautogui.moveTo(mouseX, mouseY)
+        
+        
+        
+        
+        
         if landmarks:
             command_string = ""
             self.x_pos.setText(str(round(landmarks["x"], 2)))
@@ -127,15 +151,20 @@ class Main_Tab(QtWidgets.QWidget):
 
             if landmarks["x"] > .60:
                 command_string = "Right"
+                self.visualizer.set_right()
             elif landmarks["x"] < .40:
                 command_string = "Left"
+                self.visualizer.set_left()
             else:
                 command_string = "None"
+                self.visualizer.clear_colors()
 
             if landmarks["y"] > .70:
                 command_string += "-Down"
+                self.visualizer.set_down()
             elif landmarks["y"] < .30:
                 command_string += "-Up"
+                self.visualizer.set_up()
             else:
                 command_string += "-None"
 
@@ -143,34 +172,8 @@ class Main_Tab(QtWidgets.QWidget):
             self.command_label.adjustSize()
             # pyautogui.moveTo(mouseX, mouseY)
         
-    def handle_hand_check(self):
-        self.do_hand_tracking = self.hand_tracking_check.isChecked()
-
-        if self.do_hand_tracking:
-            self.camera.stop()
-            self.camera = Camera_Thread_Hands()
-            self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
-            self.camera.start()
-        else:
-            self.camera.stop()
-            self.camera = Camera_Thread()
-            self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
-            self.camera.start()
-
-    def handle_gesture_check(self):
-        self.do_gesture_tracking = self.gesture_check.isChecked()
-
-        if self.do_gesture_tracking:
-            self.camera.stop()
-            self.camera = Camera_Thread_Gesture()
-            self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
-            self.camera.GestureUpdate.connect(self.GestureUpdateSlot)
-            self.camera.start()
-        else:
-            self.camera.stop()
-            self.camera = Camera_Thread()
-            self.camera.ImageUpdate.connect(self.ImageUpdateSlot)
-            self.camera.start()
+    def handle_mouse_check(self):
+        self.mouse_mode = self.mouse_check.isChecked()
 
     def cancel_feed(self):
         self.camera.stop()
@@ -236,15 +239,19 @@ class Camera_Thread_Gesture(QThread):
                 self.GestureUpdate.emit([category.category_name for category in gesture])
 
         options = GestureRecognizerOptions(
-            base_options=BaseOptions(model_asset_path='./gui/gesture_recognizer.task'),
+            base_options=BaseOptions(model_asset_path='./src/gesture_recognizer.task'),
             running_mode=VisionRunningMode.LIVE_STREAM,
             result_callback=print_result)
         with GestureRecognizer.create_from_options(options) as recognizer:
             mp_drawing = mp.solutions.drawing_utils
             mp_hands = mp.solutions.hands
 
-
-            camera = cv2.VideoCapture(0)
+            if platform == "darwin":
+                camera = cv2.VideoCapture(0)
+            elif platform == "win32":
+                camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            
+            
             with mp_hands.Hands(
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
@@ -285,7 +292,9 @@ class Camera_Thread_Gesture(QThread):
                                         coords = {
                                             'x': landmark.x,
                                             'y': landmark.y,
-                                            'z': landmark.z
+                                            'z': landmark.z,
+                                            'frameHeight': frameHeight,
+                                            'frameWidth': frameWidth,
                                         }
                                         self.HandPosUpdate.emit(coords)
                                         # z
