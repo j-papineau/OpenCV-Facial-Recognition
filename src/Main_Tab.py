@@ -120,6 +120,10 @@ class Main_Tab(QtWidgets.QWidget):
             self.claw_indicator.setChecked(True)
         else:
             self.claw_indicator.setChecked(False)
+            
+        if self.mouse_mode:
+            if gestures[0] == "Pointing_Up":
+                pyautogui.leftClick()
 
     def HandPosUpdateSlot(self, landmarks):
         # print(landmarks)
@@ -134,11 +138,21 @@ class Main_Tab(QtWidgets.QWidget):
             y = int(landmarks["y"] * landmarks["frameHeight"])
             mouseY = self.screenHeight/landmarks["frameHeight"]*y
             
+            # optional mouse smoothing
+            
+            smooth = 5
+            
+            mouseX = mouseX / smooth
+            mouseX = round(mouseX, 0)
+            mouseX = mouseX * smooth
+            
+            mouseY = mouseY / smooth
+            mouseY = round(mouseY, 0)
+            mouseY = mouseY * smooth
+            
+            print(f'{mouseX} {mouseY}')
+            
             pyautogui.moveTo(mouseX, mouseY)
-        
-        
-        
-        
         
         if landmarks:
             command_string = ""
