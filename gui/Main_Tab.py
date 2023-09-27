@@ -10,6 +10,7 @@ from hand_tracking import *
 import mediapipe as mp
 # from keras.models import load_model
 import pyautogui
+from controller_visualizer import *
 
 
 # from ..hand_tracking import *
@@ -21,7 +22,7 @@ class Main_Tab(QtWidgets.QWidget):
 
         self.layout = QGridLayout()
 
-        self.screenWidth, self.screenHeight = pyautogui.size()
+        # self.screenWidth, self.screenHeight = pyautogui.size()
         
 
         self.FeedLabel = QLabel()
@@ -63,6 +64,7 @@ class Main_Tab(QtWidgets.QWidget):
         self.command_label = QLabel("None")
         self.command_label.setStyleSheet("font-size: 24pt;")
         self.sidebar_layout.addWidget(self.command_label)
+       
 
 
         # bottom buttons
@@ -82,8 +84,16 @@ class Main_Tab(QtWidgets.QWidget):
         self.bottom_label = QLabel("Output (For Gestures)")
         self.bottom_out_label = QLabel("None")
         self.bottom_out_label.setStyleSheet("font-size:24pt")
-        self.bottom_layout.addWidget(self.bottom_label)
-        self.bottom_layout.addWidget(self.bottom_out_label)
+        self.bottom_layout.addWidget(self.bottom_label, 0, 0)
+        self.bottom_layout.addWidget(self.bottom_out_label, 1, 0)
+
+        self.visualizer = Controller_Visualizer()
+        # self.visualizer = Joystick()
+        self.bottom_layout.addWidget(self.visualizer, 1 , 1)
+
+
+        
+
 
         self.layout.addLayout(self.bottom_layout, 2, 0)
 
